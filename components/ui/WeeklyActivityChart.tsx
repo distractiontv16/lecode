@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 interface ActivityDay {
   day: string;
   quizCount: number;
-  height: string;
+  height: number;
 }
 
 interface WeeklyActivityChartProps {
@@ -13,6 +13,7 @@ interface WeeklyActivityChartProps {
 }
 
 export default function WeeklyActivityChart({ data = [] }: WeeklyActivityChartProps) {
+  console.log('WeeklyActivityChart received data:', data);
   const barAnimations = useRef<Animated.Value[]>([]);
 
   // Initialiser les animations si nécessaire
@@ -25,13 +26,13 @@ export default function WeeklyActivityChart({ data = [] }: WeeklyActivityChartPr
 
     const animations = barAnimations.current.map((anim, index) =>
       Animated.timing(anim, {
-        toValue: parseFloat(data[index].height) / 100,
+        toValue: data[index].height / 150, // Normaliser la hauteur par rapport à la hauteur max du barWrapper
         duration: 1000,
         delay: index * 100,
         useNativeDriver: true,
       })
     );
-
+    console.log('Starting animations for bars, data:', data);
     Animated.parallel(animations).start();
   }, [data]);
 
@@ -115,7 +116,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     borderRadius: 10,
-    transform: [{ scaleY: 0 }],
   },
   gradientFill: {
     width: '100%',

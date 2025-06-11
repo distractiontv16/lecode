@@ -134,12 +134,6 @@ export const DISEASE_DETAILS: { [key: string]: DiseaseDetails } = {
           content: '- Fièvre brutale > 38,5°C\n- Frissons intenses\n- Maux de tête sévères\n- Courbatures\n- Fatigue importante',
         },
       ],
-      causes: [
-        {
-          title: 'Causes principales',
-          content: '- Piqûre de moustique Anophèle femelle\n- Transmission du parasite Plasmodium\n- Zones tropicales et subtropicales',
-        },
-      ],
       prevention: [
         {
           title: 'Prévention pour les enfants',

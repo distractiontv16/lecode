@@ -1,23 +1,42 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useThemeMode } from '@/context/ThemeContext';
 import Colors from '@/constants/Colors';
 import SharedTransition from '@/components/navigation/SharedTransition';
-import { DISEASES_BY_CATEGORY } from '@/constants/diseases';
-import { Disease } from '@/types/diseases';
+import { getDiseasesByCategory } from '../../../services/diseaseService';
+
+// Type minimal pour une maladie (compatible Firestore)
+type DiseaseMinimal = {
+  id: string;
+  title: string;
+  description?: string;
+  image?: string;
+  [key: string]: any;
+};
 
 export default function DiseasesListScreen() {
   const { theme } = useThemeMode();
   const router = useRouter();
-  const { category, title } = useLocalSearchParams();
-  
-  const diseases = DISEASES_BY_CATEGORY[category as string] || [];
+  const { category, title, firebaseDocId, categoryImage } = useLocalSearchParams();
+  const [diseases, setDiseases] = useState<DiseaseMinimal[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchDiseases() {
+      setLoading(true);
+      const data = await getDiseasesByCategory(firebaseDocId as string);
+      console.log('Diseases fetched from Firebase for category', firebaseDocId, ':', data);
+      setDiseases(data);
+      setLoading(false);
+    }
+    if (firebaseDocId) fetchDiseases();
+  }, [firebaseDocId]);
 
   const navigateToDisease = (diseaseId: string, diseaseTitle: string) => {
     router.push({
       pathname: `/learn/${category}/disease/${diseaseId}`,
-      params: { title: diseaseTitle }
+      params: { title: diseaseTitle, categoryId: category, firebaseDocId: firebaseDocId, categoryImage: categoryImage }
     });
   };
 
@@ -30,8 +49,10 @@ export default function DiseasesListScreen() {
         <Text style={[styles.categoryTitle, { color: Colors[theme].text }]}>
           {title}
         </Text>
-
-        {diseases.map((disease) => (
+        {loading ? (
+          <ActivityIndicator size="large" color="#2196F3" style={{ marginTop: 40 }} />
+        ) : (
+          diseases.map((disease, idx) => (
           <TouchableOpacity
             key={disease.id}
             style={[styles.diseaseCard, { backgroundColor: Colors[theme].card }]}
@@ -39,13 +60,13 @@ export default function DiseasesListScreen() {
           >
             <View style={styles.diseaseContent}>
               <Image 
-                source={disease.image}
+                    source={categoryImage as any}
                 style={styles.diseaseImage}
                 resizeMode="contain"
               />
               <View style={styles.diseaseInfo}>
                 <Text style={[styles.diseaseTitle, { color: Colors[theme].text }]}>
-                  {disease.title}
+                    {`${idx + 1}. ${disease.title}`}
                 </Text>
                 <Text style={[styles.diseaseDescription, { color: Colors[theme].textSecondary }]}>
                   {disease.description}
@@ -53,7 +74,8 @@ export default function DiseasesListScreen() {
               </View>
             </View>
           </TouchableOpacity>
-        ))}
+          ))
+        )}
       </ScrollView>
     </SharedTransition>
   );

@@ -8,6 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useXP } from '@/context/XPContext';
 import { HeartsService } from '@/app/services/hearts.service';
 import { useHearts } from '@/context/HeartsContext';
+import ConfettiCannon from 'react-native-confetti-cannon';
 
 const { width } = Dimensions.get('window');
 
@@ -44,6 +45,7 @@ export default function QuizResultsScreen() {
   const [heartsChange, setHeartsChange] = useState<number>(0);
   const [heartRegenerationTime, setHeartRegenerationTime] = useState<string>('');
   const [noHeartsLeft, setNoHeartsLeft] = useState<boolean>(false);
+  const [showConfetti, setShowConfetti] = useState(false);
   
   // Convertir les paramètres d'URL en valeurs utilisables
   const points = pointsParam ? parseInt(pointsParam as string, 10) : 0;
@@ -149,6 +151,7 @@ export default function QuizResultsScreen() {
                 setNextQuizId(nextQuizAccessResult.nextQuizId);
               }
             }
+            setShowConfetti(true); // Déclencher les confettis après la sauvegarde réussie
           }
           
           setSavedProgress(true);
@@ -401,6 +404,13 @@ export default function QuizResultsScreen() {
           </>
         )}
       </View>
+
+      {showConfetti && isPassing && (
+        <ConfettiCannon count={500} origin={{ x: -10, y: 0 }} fadeOut={true} fallSpeed={1000} autoStart={true} colors={['#FFD700', '#FF4081', '#4CAF50', '#2196F3']} />
+      )}
+      {showConfetti && !isPassing && (
+        <ConfettiCannon count={100} origin={{ x: -10, y: 0 }} fadeOut={true} fallSpeed={800} autoStart={true} colors={['#B0BEC5', '#78909C', '#546E7A']} />
+      )}
     </View>
   );
 }

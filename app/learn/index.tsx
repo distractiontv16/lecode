@@ -24,7 +24,6 @@ interface Category {
 
 export default function LearnScreen() {
   const { theme } = useThemeMode();
-  const [showAllCategories, setShowAllCategories] = useState(false);
   const router = useRouter();
   const { language } = useLanguage();
   
@@ -38,7 +37,7 @@ export default function LearnScreen() {
     { id: '2', title: language === 'fr' ? 'Lecture santé' : 'Health reading', completed: false },
   ];
 
-  const mainCategories: Category[] = [
+  const categories: Category[] = [
     { 
       id: '1', 
       title: language === 'fr' ? 'Troubles de la Digestion' : 'Digestive Disorders',
@@ -67,9 +66,6 @@ export default function LearnScreen() {
       color: '#9C27B0', 
       image: require('../../assets/images/respiration.png')
     },
-  ];
-
-  const additionalCategories: Category[] = [
     { 
       id: '6', 
       title: language === 'fr' ? 'Maladies du Sang' : 'Blood Diseases',
@@ -82,7 +78,7 @@ export default function LearnScreen() {
       title: language === 'fr' ? 'Santé du Cœur' : 'Heart Health',
       progress: 55, 
       color: '#795548', 
-      image: require('../../assets/images/coeurs.png')
+      image: require('../../assets/images/nutrition.png')
     },
     { 
       id: '4', 
@@ -100,13 +96,23 @@ export default function LearnScreen() {
       image: require('../../assets/images/muscles.png'),
       isNew: true
     },
+    { 
+      id: '9', 
+      title: language === 'fr' ? 'Problèmes de Peau' : 'Skin Problems',
+      progress: 0, 
+      color: '#4CAF50', 
+      image: require('../../assets/images/peau.jpg'),
+      isNew: true
+    },
+    { 
+      id: '10', 
+      title: language === 'fr' ? 'Problèmes Hormonaux' : 'Hormonal Problems',
+      progress: 0, 
+      color: '#FF9800', 
+      image: require('../../assets/images/hormonaux.jpg'),
+      isNew: true
+    },
   ];
-
-  const allCategories = [...mainCategories, ...(showAllCategories ? additionalCategories : [])];
-  
-  const toggleShowAllCategories = () => {
-    setShowAllCategories(!showAllCategories);
-  };
 
   // Fonction pour diviser les catégories en paires pour le rendu en rangées
   const renderCategoryRows = (categories: Category[]) => {
@@ -170,17 +176,10 @@ export default function LearnScreen() {
           <DailyObjectives objectives={dailyObjectives} />
           <View style={[styles.sectionHeader, { backgroundColor: 'transparent' }]}>
             <Text style={[styles.sectionTitle, { color: Colors[theme].text }]}>{language === 'fr' ? 'Catégories' : 'Categories'}</Text>
-            <TouchableOpacity onPress={toggleShowAllCategories}>
-              <Text style={[styles.seeAllButton, { color: Colors[theme].button }]}>
-                {showAllCategories
-                  ? language === 'fr' ? 'Voir moins' : 'See less'
-                  : language === 'fr' ? 'Voir tout' : 'See all'}
-              </Text>
-            </TouchableOpacity>
           </View>
           
           <View style={[styles.categoriesContainer, { backgroundColor: Colors[theme].background }]}>
-            {renderCategoryRows(allCategories)}
+            {renderCategoryRows(categories)}
           </View>
         </ScrollView>
         <BottomTabBar />

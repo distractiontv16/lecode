@@ -55,17 +55,7 @@
             }
           ]
         },
-        "causes": [
-          {
-            "title": "Comment on l'attrape ?",
-            "content": [
-              "En mangeant des aliments pas très propres 🍽️",
-              "Par les mains sales 🤚",
-              "En touchant des objets contaminés 🎮",
-              "Par contact avec quelqu'un de malade 🤝"
-            ]
-          }
-        ],
+        "causes": [],
         "prevention": {
           "children": [
             {
@@ -174,17 +164,7 @@
             }
           ]
         },
-        "causes": [
-          {
-            "title": "D'où ça vient ?",
-            "content": [
-              "Piqûre de moustique Anophèle 🦟",
-              "Le moustique transporte un petit parasite",
-              "Le parasite va dans ton sang",
-              "Ça arrive surtout dans les pays chauds ☀️"
-            ]
-          }
-        ],
+        "causes": [],
         "prevention": {
           "children": [
             {

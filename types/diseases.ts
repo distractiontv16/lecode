@@ -20,7 +20,6 @@ export interface DiseaseDetails {
   funFact?: string;
   sections: {
     symptoms: DiseaseSection[];
-    causes: DiseaseSection[];
     prevention: DiseaseSection[];
     treatment: DiseaseSection[];
     whenToConsult: DiseaseSection[];

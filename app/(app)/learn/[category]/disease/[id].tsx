@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions, ActivityIndicator, ImageRequireSource } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useThemeMode } from '@/context/ThemeContext';
 import Colors from '@/constants/Colors';
 import SharedTransition from '@/components/navigation/SharedTransition';
 import { Ionicons } from '@expo/vector-icons';
-import { DiseaseSection, DiseaseDetails } from '@/types/diseases';
+import { DiseaseSection } from '@/types/diseases';
+import { getDiseaseDetails } from '../../../../services/diseaseService';
 
 const { width } = Dimensions.get('window');
 
-type SectionType = 'symptoms' | 'causes' | 'prevention' | 'treatment' | 'whenToConsult';
+type SectionType = 'symptoms' | 'prevention' | 'treatment' | 'whenToConsult';
 
 const SECTIONS: { 
   type: SectionType; 
@@ -26,14 +27,6 @@ const SECTIONS: {
     emoji: '🤒',
     color: '#FF9800',
     description: 'Découvre les signes qui montrent que tu es malade'
-  },
-  { 
-    type: 'causes', 
-    title: 'Pourquoi je suis malade ?', 
-    icon: 'help-circle-outline',
-    emoji: '🔍',
-    color: '#2196F3',
-    description: 'Comprends ce qui peut te rendre malade'
   },
   { 
     type: 'prevention', 
@@ -61,20 +54,117 @@ const SECTIONS: {
   },
 ];
 
-// Importer les détails des maladies depuis les constantes
-import { DISEASE_DETAILS } from '@/constants/diseases';
+// Interface pour les données brutes venant de Firebase (le type d'image est string)
+interface FirebaseDiseaseData {
+  id: string;
+  title?: string;
+  image?: string; // Nom de fichier de l'image depuis Firebase
+  definition?: string;
+  funFact?: string;
+  sections?: any;
+  [key: string]: any;
+}
+
+// Interface pour les données de maladie traitées pour le composant (avec sections correctement typées)
+interface DiseaseDetailsType {
+  id: string;
+  title: string;
+  definition?: string;
+  funFact?: string;
+  sections: { // Les sections pour l'affichage dans le composant
+    symptoms: DiseaseSection[];
+    prevention: DiseaseSection[];
+    treatment: DiseaseSection[];
+    whenToConsult: DiseaseSection[];
+  };
+  [key: string]: any;
+}
 
 export default function DiseaseDetailScreen() {
   const { theme } = useThemeMode();
-  const { id, category } = useLocalSearchParams();
+  const { id, category, categoryImage, firebaseDocId } = useLocalSearchParams();
   const [activeSection, setActiveSection] = useState<SectionType>('symptoms');
-  
-  const diseaseDetails = DISEASE_DETAILS[id as string];
+  const [diseaseDetails, setDiseaseDetails] = useState<DiseaseDetailsType | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchDetails() {
+      setLoading(true);
+      console.log('Fetching disease details for ID:', id, 'from category:', firebaseDocId);
+      const dataFromFirebaseRaw: FirebaseDiseaseData | null = await getDiseaseDetails(id as string, firebaseDocId as string);
+      console.log('Raw disease data from Firebase:', dataFromFirebaseRaw);
+
+      let diseaseDataForState: DiseaseDetailsType | null = null;
+
+      if (dataFromFirebaseRaw) {
+        // Fonction utilitaire pour transformer les données de section brutes
+        const transformSectionData = (rawSection: { adults?: string; children?: string } | string | undefined, sectionTitleBase: string): DiseaseSection[] => {
+          console.log(`Entering transformSectionData for: ${sectionTitleBase}, rawSection:`, rawSection);
+          const transformed: DiseaseSection[] = [];
+
+          if (typeof rawSection === 'string') {
+            // Cas où rawSection est une chaîne de caractères unique
+            transformed.push({
+              title: sectionTitleBase,
+              content: rawSection,
+            });
+          } else if (typeof rawSection === 'object' && rawSection !== null) {
+            // Cas où rawSection est un objet avec children et/ou adults
+            if (rawSection.children) {
+              transformed.push({
+                title: `${sectionTitleBase} chez l'enfant`,
+                content: rawSection.children,
+                children: true,
+              });
+            }
+            if (rawSection.adults) {
+              transformed.push({
+                title: `${sectionTitleBase} chez l'adulte`,
+                content: rawSection.adults,
+                adults: true,
+              });
+            }
+          }
+          console.log(`Transformed ${sectionTitleBase} section:`, transformed);
+          return transformed;
+        };
+
+        diseaseDataForState = {
+          id: dataFromFirebaseRaw.id,
+          title: dataFromFirebaseRaw.title || 'Titre inconnu',
+          definition: dataFromFirebaseRaw.definition || '',
+          funFact: dataFromFirebaseRaw.funFact || '',
+          sections: {
+            symptoms: transformSectionData(dataFromFirebaseRaw.details?.symptoms, SECTIONS.find(s => s.type === 'symptoms')?.title || 'Symptômes'),
+            prevention: transformSectionData(dataFromFirebaseRaw.details?.prevention, SECTIONS.find(s => s.type === 'prevention')?.title || 'Prévention'),
+            treatment: transformSectionData(dataFromFirebaseRaw.details?.treatment, SECTIONS.find(s => s.type === 'treatment')?.title || 'Traitement'),
+            whenToConsult: transformSectionData(
+              dataFromFirebaseRaw.whenToConsult || dataFromFirebaseRaw.details?.whenToConsult,
+              SECTIONS.find(s => s.type === 'whenToConsult')?.title || 'Quand consulter'
+            ),
+          },
+          // Ne propage pas 'image' ou 'details' bruts car ils sont traités/mappés
+        };
+      }
+      console.log('Final disease data for state:', diseaseDataForState);
+      setDiseaseDetails(diseaseDataForState);
+      setLoading(false);
+    }
+    if (id) fetchDetails();
+  }, [id, firebaseDocId]);
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: Colors[theme].background, justifyContent: 'center', alignItems: 'center' }] }>
+        <ActivityIndicator size="large" color="#2196F3" />
+      </View>
+    );
+  }
 
   if (!diseaseDetails) {
     return (
-      <View style={[styles.container, { backgroundColor: Colors[theme].background }]}>
-        <Text style={[styles.errorText, { color: Colors[theme].text }]}>
+      <View style={[styles.container, { backgroundColor: Colors[theme].background }] }>
+        <Text style={[styles.errorText, { color: Colors[theme].text }] }>
           Maladie non trouvée 😕
         </Text>
       </View>
@@ -83,34 +173,52 @@ export default function DiseaseDetailScreen() {
 
   const activeColor = SECTIONS.find(s => s.type === activeSection)?.color || Colors.primary;
 
+  // Détermine la source d'image correcte pour le composant Image
+  let imageSource: ImageRequireSource | undefined;
+
+  if (typeof categoryImage === 'string') {
+    const parsedImage = parseInt(categoryImage, 10);
+    if (!isNaN(parsedImage)) {
+      imageSource = parsedImage as ImageRequireSource;
+    }
+  } else if (Array.isArray(categoryImage) && typeof categoryImage[0] === 'string') {
+    const parsedImage = parseInt(categoryImage[0], 10);
+    if (!isNaN(parsedImage)) {
+      imageSource = parsedImage as ImageRequireSource;
+    }
+  }
+
   return (
     <SharedTransition transitionKey={`disease-${id}`}>
-      <View style={[styles.container, { backgroundColor: Colors[theme].background }]}>
+      <View style={[styles.container, { backgroundColor: Colors[theme].background }] }>
         <ScrollView style={styles.scrollView}>
           {/* Header Section */}
-          <View style={[styles.header, { backgroundColor: activeColor }]}>
+          <View style={[styles.header, { backgroundColor: activeColor }] }>
+            {/* Utilise imageSource directement ici */}
+            {imageSource ? (
             <Image 
-              source={diseaseDetails.image}
+                source={imageSource}
               style={styles.diseaseImage}
               resizeMode="contain"
             />
+            ) : null}
             <Text style={styles.title}>
               {diseaseDetails.title}
             </Text>
           </View>
 
           {/* Definition Card */}
-          <View style={[styles.definitionCard, { backgroundColor: Colors[theme].card }]}>
+          <View style={[styles.definitionCard, { backgroundColor: Colors[theme].card }] }>
             <View style={styles.definitionHeader}>
-              <Text style={[styles.definitionTitle, { color: Colors[theme].text }]}>
+              <Text style={[styles.definitionTitle, { color: Colors[theme].text }] }>
                 🤔 C'est quoi cette maladie ?
               </Text>
             </View>
-            <Text style={[styles.definitionText, { color: Colors[theme].textSecondary }]}>
+            <Text style={[styles.definitionText, { color: Colors[theme].textSecondary }] }>
               {diseaseDetails.definition || "Une explication simple sera bientôt disponible !"}
             </Text>
             <View style={styles.definitionTips}>
-              <Text style={[styles.tipsText, { color: activeColor }]}>
+              <Text style={[styles.tipsText, { color: activeColor }] }>
                 💡 Le savais-tu ? {diseaseDetails.funFact || ""}
               </Text>
             </View>
@@ -156,14 +264,18 @@ export default function DiseaseDetailScreen() {
 
           {/* Section Description */}
           <View style={styles.sectionDescription}>
-            <Text style={[styles.descriptionText, { color: activeColor }]}>
+            <Text style={[styles.descriptionText, { color: activeColor }] }>
               {SECTIONS.find(s => s.type === activeSection)?.description}
             </Text>
           </View>
 
           {/* Content Section */}
           <View style={styles.content}>
-            {diseaseDetails.sections[activeSection].map((section: DiseaseSection, index: number) => (
+            {/* Add defensive checks before mapping sections */}
+            {diseaseDetails.sections &&
+             diseaseDetails.sections[activeSection] &&
+             Array.isArray(diseaseDetails.sections[activeSection]) &&
+             diseaseDetails.sections[activeSection].map((section: DiseaseSection, index: number) => (
               <View 
                 key={index}
                 style={[
@@ -176,21 +288,21 @@ export default function DiseaseDetailScreen() {
                 ]}
               >
                 <View style={styles.sectionHeader}>
-                  <Text style={[styles.sectionTitle, { color: Colors[theme].text }]}>
+                  <Text style={[styles.sectionTitle, { color: Colors[theme].text }] }>
                     {section.title}
                   </Text>
                   {section.children && (
-                    <View style={[styles.ageBadge, { backgroundColor: '#4CAF50' }]}>
+                    <View style={[styles.ageBadge, { backgroundColor: '#4CAF50' }] }>
                       <Text style={styles.ageBadgeText}>👶 Enfant</Text>
                     </View>
                   )}
                   {section.adults && (
-                    <View style={[styles.ageBadge, { backgroundColor: '#2196F3' }]}>
+                    <View style={[styles.ageBadge, { backgroundColor: '#2196F3' }] }>
                       <Text style={styles.ageBadgeText}>🧑 Adulte</Text>
                     </View>
                   )}
                 </View>
-                <Text style={[styles.sectionContent, { color: Colors[theme].textSecondary }]}>
+                <Text style={[styles.sectionContent, { color: Colors[theme].textSecondary }] }>
                   {section.content}
                 </Text>
               </View>
