@@ -112,7 +112,10 @@ export default function LearnScreen() {
               progress={leftCategory.progress}
               color={leftCategory.color}
               image={leftCategory.image}
-              onPress={() => console.log(`Catégorie ${leftCategory.title} sélectionnée`)}
+              onPress={() => router.push({
+                pathname: `/learn/${leftCategory.id}`,
+                params: { title: leftCategory.title }
+              })}
               isNew={leftCategory.isNew}
               locked={leftCategory.locked}
             />
@@ -125,7 +128,10 @@ export default function LearnScreen() {
                 progress={rightCategory.progress}
                 color={rightCategory.color}
                 image={rightCategory.image}
-                onPress={() => console.log(`Catégorie ${rightCategory.title} sélectionnée`)}
+                onPress={() => router.push({
+                  pathname: `/learn/${rightCategory.id}`,
+                  params: { title: rightCategory.title }
+                })}
                 isNew={rightCategory.isNew}
                 locked={rightCategory.locked}
               />
