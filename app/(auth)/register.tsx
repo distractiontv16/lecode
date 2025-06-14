@@ -6,9 +6,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { FirebaseError } from 'firebase/app';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { Picker } from '@react-native-picker/picker';
 import { userStatsService } from '@/app/services/userStats';
 import { UserCredential } from 'firebase/auth';
+import { useErrorHandler } from '../../hooks/useErrorHandler';
+import { ErrorMessage } from '../../components/ui/ErrorMessage';
+import { SuccessMessage } from '../../components/ui/SuccessMessage';
 
 // Liste des groupes sanguins disponibles
 const BLOOD_TYPES = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
@@ -21,8 +23,15 @@ export default function RegisterScreen() {
   const [bloodType, setBloodType] = useState('');
   const [birthDate, setBirthDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const {
+    error,
+    isLoading,
+    successMessage,
+    setLoading,
+    handleValidationError,
+    clearError,
+    clearSuccess
+  } = useErrorHandler();
   const [showBloodTypeModal, setShowBloodTypeModal] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] = useState(false);
@@ -72,55 +81,54 @@ export default function RegisterScreen() {
   const handleRegister = async () => {
     try {
       if (!name.trim()) {
-        setError('Le nom est obligatoire');
+        handleValidationError('Le nom est obligatoire');
         return;
       }
 
       if (!email.trim()) {
-        setError('L\'email est obligatoire');
+        handleValidationError('L\'email est obligatoire');
         return;
       }
 
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email.trim())) {
-        setError('Format d\'email invalide');
+        handleValidationError('Format d\'email invalide');
         return;
       }
 
       if (!password.trim()) {
-        setError('Le mot de passe est obligatoire');
+        handleValidationError('Le mot de passe est obligatoire');
         return;
       }
 
       if (!confirmPassword.trim()) {
-        setError('La confirmation du mot de passe est obligatoire');
-      return;
-    }
-    
-    if (password !== confirmPassword) {
-      setError('Les mots de passe ne correspondent pas');
-      return;
-    }
-    
-    if (password.length < 6) {
-      setError('Le mot de passe doit contenir au moins 6 caractères');
-      return;
-    }
+        handleValidationError('La confirmation du mot de passe est obligatoire');
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        handleValidationError('Les mots de passe ne correspondent pas');
+        return;
+      }
+
+      if (password.length < 6) {
+        handleValidationError('Le mot de passe doit contenir au moins 6 caractères');
+        return;
+      }
 
       if (!BLOOD_TYPES.includes(bloodType)) {
-        setError('Veuillez sélectionner un groupe sanguin valide');
+        handleValidationError('Veuillez sélectionner un groupe sanguin valide');
         return;
       }
 
       const today = new Date();
       const age = today.getFullYear() - birthDate.getFullYear();
       if (age < 5) {
-        setError('Vous devez avoir au moins 5 ans pour vous inscrire');
+        handleValidationError('Vous devez avoir au moins 5 ans pour vous inscrire');
         return;
       }
-    
-    setIsLoading(true);
-    setError('');
+
+      setLoading(true);
     
       const userCredential = await signUp(email.trim(), password, name.trim()) as UserCredential;
       
@@ -136,14 +144,14 @@ export default function RegisterScreen() {
         
         // Afficher le modal de bienvenue
         setShowWelcomeModal(true);
-        setIsLoading(false);
+        setLoading(false);
       }
     } catch (error: any) {
-      setIsLoading(false);
+      setLoading(false);
       if (error instanceof FirebaseError) {
         switch (error.code) {
         case 'auth/email-already-in-use':
-            setError('Cette adresse email est déjà utilisée');
+            handleValidationError('Cette adresse email est déjà utilisée');
             Alert.alert(
               'Email déjà utilisé',
               'Un compte existe déjà avec cette adresse email. Voulez-vous vous connecter ?',
@@ -161,26 +169,21 @@ export default function RegisterScreen() {
             );
           break;
         case 'auth/invalid-email':
-            setError('Format d\'email invalide (exemple: nom@domaine.com)');
+            handleValidationError('Format d\'email invalide (exemple: nom@domaine.com)');
           break;
         case 'auth/weak-password':
-            setError('Le mot de passe est trop faible');
+            handleValidationError('Le mot de passe est trop faible');
           break;
           default:
-            setError('Une erreur est survenue lors de l\'inscription');
+            handleValidationError('Une erreur est survenue lors de l\'inscription');
         }
       } else {
-        setError('Une erreur est survenue lors de l\'inscription');
+        handleValidationError('Une erreur est survenue lors de l\'inscription');
       }
     }
   };
   
-  const onDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
-    if (selectedDate) {
-      setBirthDate(selectedDate);
-    }
-  };
+
   
   return (
     <KeyboardAvoidingView 
@@ -212,7 +215,20 @@ export default function RegisterScreen() {
       <View style={styles.formContainer}>
         <Text style={styles.formTitle}>Créer un compte</Text>
         
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        <ErrorMessage
+          error={error}
+          onActionPress={error?.actionable ? () => router.push('/(auth)/login') : undefined}
+          onDismiss={clearError}
+          dismissible={true}
+        />
+
+        <SuccessMessage
+          message={successMessage || ''}
+          visible={!!successMessage}
+          onDismiss={clearSuccess}
+          dismissible={true}
+          autoHide={true}
+        />
         
         <View style={styles.inputContainer}>
           <Image 
@@ -352,7 +368,7 @@ export default function RegisterScreen() {
                   value={birthDate}
                   mode="date"
                   display="spinner"
-                  onChange={(event, selectedDate) => {
+                  onChange={(_, selectedDate) => {
                     if (selectedDate) setBirthDate(selectedDate);
                   }}
                   maximumDate={new Date()}
@@ -389,7 +405,7 @@ export default function RegisterScreen() {
                       value={birthDate}
                       mode="date"
                       display="calendar"
-                      onChange={(event, selectedDate) => {
+                      onChange={(_, selectedDate) => {
                         if (selectedDate) setBirthDate(selectedDate);
                         setShowDatePicker(false);
                       }}

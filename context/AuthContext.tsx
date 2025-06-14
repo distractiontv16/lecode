@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  getAuth, 
-  signInWithEmailAndPassword, 
+import {
+  signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
   sendPasswordResetEmail,
@@ -14,18 +13,16 @@ import {
   updatePassword as firebaseUpdatePassword,
   UserCredential
 } from 'firebase/auth';
-import { 
-  getFirestore, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  collection, 
-  serverTimestamp,
-  updateDoc
+import {
+  doc,
+  setDoc,
+  getDoc,
+  serverTimestamp
 } from 'firebase/firestore';
+import { FirebaseError } from 'firebase/app';
 import { firebaseAuth, firebaseDB } from '../backend/config/firebase.config';
-import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { errorService } from '../app/services/error.service';
 
 // Clé pour stocker l'email dans AsyncStorage
 const EMAIL_FOR_SIGNIN = 'emailForSignIn';
@@ -91,7 +88,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await signInWithEmailAndPassword(firebaseAuth, email, password);
     } catch (error: any) {
-      throw new Error(error.message);
+      // Lancer l'erreur Firebase directement pour que les composants puissent la traiter
+      if (error instanceof FirebaseError) {
+        throw error;
+      }
+      // Pour les autres types d'erreurs, les wrapper dans une FirebaseError générique
+      throw new Error(error.message || 'Erreur de connexion');
     }
   };
 
@@ -99,13 +101,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       // Créer l'utilisateur dans Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(firebaseAuth, email, password);
-      
+
       // Mettre à jour le profil dans Firebase Auth
       if (userCredential.user) {
         await updateProfile(userCredential.user, {
           displayName: name
         });
-        
+
         // Stocker des informations supplémentaires dans Firestore
         // Mais ne pas bloquer le processus d'inscription si Firestore échoue
         setDoc(doc(firebaseDB, 'users', userCredential.user.uid), {
@@ -115,13 +117,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           birthDate: userCredential.user.metadata.creationTime ? new Date(userCredential.user.metadata.creationTime).toISOString() : undefined,
           createdAt: serverTimestamp()
         }).catch(error => {
-          console.log('Erreur lors de la sauvegarde dans Firestore - continuez sans synchronisation');
+          errorService.handleGenericError(error, 'AuthContext.signUp.firestore');
         });
       }
-      
+
       return userCredential;
     } catch (error: any) {
-      throw new Error(error.message);
+      // Lancer l'erreur Firebase directement pour que les composants puissent la traiter
+      if (error instanceof FirebaseError) {
+        throw error;
+      }
+      throw new Error(error.message || 'Erreur lors de l\'inscription');
     }
   };
 
@@ -133,12 +139,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await AsyncStorage.removeItem(EMAIL_FOR_SIGNIN);
         // Si vous stockez d'autres données locales, les nettoyer ici
       } catch (storageError) {
-        console.log('Erreur de nettoyage des données locales:', storageError);
+        errorService.handleGenericError(storageError, 'AuthContext.signOut.localStorage');
         // Continuer même en cas d'erreur de stockage
       }
       // Le reste sera géré par le subscriber onAuthStateChanged
     } catch (error: any) {
-      throw new Error(error.message);
+      if (error instanceof FirebaseError) {
+        throw error;
+      }
+      throw new Error(error.message || 'Erreur lors de la déconnexion');
     }
   };
 
@@ -146,7 +155,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await sendPasswordResetEmail(firebaseAuth, email);
     } catch (error: any) {
-      throw new Error(error.message);
+      if (error instanceof FirebaseError) {
+        throw error;
+      }
+      throw new Error(error.message || 'Erreur lors de l\'envoi de l\'email de réinitialisation');
     }
   };
 
@@ -155,7 +167,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       // Configuration du lien d'authentification
       const actionCodeSettings = {
-        // URL avec le domaine autorisé dans Firebase 
+        // URL avec le domaine autorisé dans Firebase
         url: 'https://meducare01-ea9c1.firebaseapp.com/finishSignIn',
         handleCodeInApp: true,
         // Information sur l'application Android
@@ -169,14 +181,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           bundleId: 'com.meducare.app'
         }
       };
-      
+
       // Envoyer le lien d'authentification
       await sendSignInLinkToEmail(firebaseAuth, email, actionCodeSettings);
-      
+
       // Sauvegarder l'email dans AsyncStorage pour le récupérer plus tard
       await AsyncStorage.setItem(EMAIL_FOR_SIGNIN, email);
     } catch (error: any) {
-      throw new Error(error.message);
+      if (error instanceof FirebaseError) {
+        throw error;
+      }
+      throw new Error(error.message || 'Erreur lors de l\'envoi du lien de connexion');
     }
   };
 
@@ -208,7 +223,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           birthDate: result.user.metadata.creationTime ? new Date(result.user.metadata.creationTime).toISOString() : undefined,
           createdAt: serverTimestamp()
         }).catch(error => {
-          console.log('Erreur Firestore lors de la connexion par lien - continuez sans synchronisation');
+          errorService.handleGenericError(error, 'AuthContext.completeSignInWithLink.firestore');
         });
       }
       
@@ -217,7 +232,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // Le reste sera géré par le subscriber onAuthStateChanged
     } catch (error: any) {
-      throw new Error(error.message);
+      if (error instanceof FirebaseError) {
+        throw error;
+      }
+      throw new Error(error.message || 'Erreur lors de la finalisation de la connexion');
     }
   };
 
@@ -229,7 +247,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await firebaseUpdatePassword(user, newPassword);
     } catch (error: any) {
-      throw new Error(error.message);
+      if (error instanceof FirebaseError) {
+        throw error;
+      }
+      throw new Error(error.message || 'Erreur lors de la mise à jour du mot de passe');
     }
   };
 
@@ -247,7 +268,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
       }
     } catch (e) {
-      console.log('Erreur lors du rafraîchissement utilisateur:', e);
+      errorService.handleGenericError(e, 'AuthContext.refreshUserFromFirestore');
     }
   };
 

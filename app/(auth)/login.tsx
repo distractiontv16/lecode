@@ -1,54 +1,64 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Image, ScrollView, Alert, AlertButton, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Image, ScrollView, Alert, AlertButton, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { FirebaseError } from 'firebase/app';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useErrorHandler } from '../../hooks/useErrorHandler';
+import { ErrorMessage } from '../../components/ui/ErrorMessage';
+import { SuccessMessage } from '../../components/ui/SuccessMessage';
+import { errorService } from '../../app/services/error.service';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [resetEmailSent, setResetEmailSent] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const scrollViewRef = React.useRef<ScrollView>(null);
-  
+
   const router = useRouter();
   const { signIn, forgotPassword } = useAuth();
+  const {
+    error,
+    isLoading,
+    successMessage,
+    setLoading,
+    handleFirebaseError,
+    handleValidationError,
+    handleSuccess,
+    clearError,
+    clearSuccess
+  } = useErrorHandler();
   
   const handleLogin = async () => {
+    // Validation des champs
     if (!email.trim() || !password.trim()) {
-      setError('Veuillez remplir tous les champs');
+      handleValidationError('validation/empty-fields');
       return;
     }
 
-    if (!email.includes('@')) {
-      setError('Veuillez entrer une adresse email valide');
+    // Validation de l'email
+    const emailError = errorService.validateEmail(email);
+    if (emailError) {
+      handleValidationError('validation/invalid-email');
       return;
     }
-    
-    setIsLoading(true);
-    setError('');
-    
+
+    setLoading(true);
+
     try {
       await signIn(email.trim(), password);
+      handleSuccess('auth/login-success');
       router.replace('/learn');
     } catch (e: any) {
-      let errorMessage = 'Une erreur est survenue lors de la connexion';
-      let errorDetails = '';
-      
-      const firebaseError = e as FirebaseError;
-      switch (firebaseError.code) {
-        case 'auth/invalid-email':
-        case 'auth/user-not-found':
-        case 'auth/wrong-password':
-          errorMessage = 'Email ou mot de passe incorrect';
-          errorDetails = 'Veuillez vérifier vos identifiants';
+      if (e instanceof FirebaseError) {
+        const errorMessage = errorService.handleFirebaseError(e, 'LoginScreen.handleLogin');
+
+        // Pour certaines erreurs d'authentification, proposer des actions
+        if (['auth/invalid-email', 'auth/user-not-found', 'auth/wrong-password'].includes(e.code)) {
           Alert.alert(
-            errorMessage,
-            errorDetails,
+            errorMessage.title,
+            errorMessage.message,
             [
               {
                 text: 'OK',
@@ -62,59 +72,47 @@ export default function LoginScreen() {
             ],
             { cancelable: false }
           );
-          break;
-        case 'auth/user-disabled':
-          errorMessage = 'Compte désactivé';
-          errorDetails = 'Votre compte a été désactivé. Veuillez contacter le support';
-          break;
-        case 'auth/too-many-requests':
-          errorMessage = 'Trop de tentatives de connexion';
-          errorDetails = 'Compte temporairement bloqué. Veuillez réinitialiser votre mot de passe ou réessayer plus tard';
-          break;
-        case 'auth/network-request-failed':
-          errorMessage = 'Erreur de connexion internet';
-          errorDetails = 'Vérifiez votre connexion et réessayez';
-          break;
-        default:
-          errorMessage = 'Une erreur est survenue';
-          errorDetails = 'Veuillez réessayer';
+        } else {
+          handleFirebaseError(e);
+        }
+      } else {
+        handleFirebaseError(e);
       }
-      
-      setError(errorMessage);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
   
   const handleForgotPassword = async () => {
     if (!email) {
-      setError('Veuillez saisir votre adresse email pour réinitialiser votre mot de passe');
+      handleValidationError('validation/empty-fields');
       return;
     }
-    
-    setIsLoading(true);
-    setError('');
-    
+
+    // Validation de l'email
+    const emailError = errorService.validateEmail(email);
+    if (emailError) {
+      handleValidationError('validation/invalid-email');
+      return;
+    }
+
+    setLoading(true);
+
     try {
       await forgotPassword(email);
-      setResetEmailSent(true);
+      handleSuccess('auth/password-reset-sent');
       Alert.alert(
         "Email envoyé",
         "Un email de réinitialisation a été envoyé à votre adresse email. Veuillez vérifier votre boîte de réception."
       );
     } catch (e: any) {
-      let errorMessage = 'Impossible d\'envoyer l\'email de réinitialisation';
-      
-      const firebaseError = e as FirebaseError;
-      if (firebaseError.code === 'auth/invalid-email') {
-        errorMessage = 'Adresse email invalide';
-      } else if (firebaseError.code === 'auth/user-not-found') {
-        errorMessage = 'Aucun compte ne correspond à cette adresse email';
+      if (e instanceof FirebaseError) {
+        handleFirebaseError(e);
+      } else {
+        handleFirebaseError(e);
       }
-      
-      setError(errorMessage);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
   
@@ -154,9 +152,21 @@ export default function LoginScreen() {
         
         <View style={styles.formContainer}>
           <Text style={styles.formTitle}>Connexion</Text>
-          
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
-          {resetEmailSent && <Text style={styles.successText}>Email de réinitialisation envoyé</Text>}
+
+          <ErrorMessage
+            error={error}
+            onActionPress={error?.actionable ? handleForgotPassword : undefined}
+            onDismiss={clearError}
+            dismissible={true}
+          />
+
+          <SuccessMessage
+            message={successMessage || ''}
+            visible={!!successMessage}
+            onDismiss={clearSuccess}
+            dismissible={true}
+            autoHide={true}
+          />
           
           <View style={styles.inputContainer}>
             <Image 
