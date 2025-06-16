@@ -11,6 +11,7 @@ import { UserCredential } from 'firebase/auth';
 import { useErrorHandler } from '../../hooks/useErrorHandler';
 import { ErrorMessage } from '../../components/ui/ErrorMessage';
 import { SuccessMessage } from '../../components/ui/SuccessMessage';
+import { errorService } from '../../app/services/error.service';
 
 // Liste des groupes sanguins disponibles
 const BLOOD_TYPES = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
@@ -27,8 +28,10 @@ export default function RegisterScreen() {
     error,
     isLoading,
     successMessage,
+    setError,
     setLoading,
     handleValidationError,
+    handleFirebaseError,
     clearError,
     clearSuccess
   } = useErrorHandler();
@@ -80,51 +83,50 @@ export default function RegisterScreen() {
 
   const handleRegister = async () => {
     try {
+      // Validation du nom
       if (!name.trim()) {
-        handleValidationError('Le nom est obligatoire');
+        handleValidationError('validation/empty-fields');
         return;
       }
 
-      if (!email.trim()) {
-        handleValidationError('L\'email est obligatoire');
+      // Validation de l'email avec le service
+      const emailValidationError = errorService.validateEmail(email);
+      if (emailValidationError) {
+        setError(emailValidationError);
         return;
       }
 
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email.trim())) {
-        handleValidationError('Format d\'email invalide');
+      // Validation du mot de passe avec le service
+      const passwordValidationError = errorService.validatePassword(password);
+      if (passwordValidationError) {
+        setError(passwordValidationError);
         return;
       }
 
-      if (!password.trim()) {
-        handleValidationError('Le mot de passe est obligatoire');
-        return;
-      }
-
+      // Validation de la confirmation du mot de passe
       if (!confirmPassword.trim()) {
-        handleValidationError('La confirmation du mot de passe est obligatoire');
+        handleValidationError('validation/empty-fields');
         return;
       }
 
-      if (password !== confirmPassword) {
-        handleValidationError('Les mots de passe ne correspondent pas');
+      // Validation de la correspondance des mots de passe avec le service
+      const passwordMatchError = errorService.validatePasswordMatch(password, confirmPassword);
+      if (passwordMatchError) {
+        setError(passwordMatchError);
         return;
       }
 
-      if (password.length < 6) {
-        handleValidationError('Le mot de passe doit contenir au moins 6 caractères');
+      // Validation du groupe sanguin avec le service
+      const bloodTypeValidationError = errorService.validateBloodType(bloodType, BLOOD_TYPES);
+      if (bloodTypeValidationError) {
+        setError(bloodTypeValidationError);
         return;
       }
 
-      if (!BLOOD_TYPES.includes(bloodType)) {
-        handleValidationError('Veuillez sélectionner un groupe sanguin valide');
-        return;
-      }
-
-      const today = new Date();
-      const age = today.getFullYear() - birthDate.getFullYear();
-      if (age < 5) {
-        handleValidationError('Vous devez avoir au moins 5 ans pour vous inscrire');
+      // Validation de l'âge avec le service
+      const ageValidationError = errorService.validateAge(birthDate);
+      if (ageValidationError) {
+        setError(ageValidationError);
         return;
       }
 
@@ -149,36 +151,33 @@ export default function RegisterScreen() {
     } catch (error: any) {
       setLoading(false);
       if (error instanceof FirebaseError) {
-        switch (error.code) {
-        case 'auth/email-already-in-use':
-            handleValidationError('Cette adresse email est déjà utilisée');
-            Alert.alert(
-              'Email déjà utilisé',
-              'Un compte existe déjà avec cette adresse email. Voulez-vous vous connecter ?',
-              [
-                {
-                  text: 'Annuler',
-                  style: 'cancel' as AlertButton['style']
-                },
-                {
-                  text: 'Se connecter',
-                  onPress: () => router.push('/(auth)/login'),
-                  style: 'default' as AlertButton['style']
-                }
-              ]
-            );
-          break;
-        case 'auth/invalid-email':
-            handleValidationError('Format d\'email invalide (exemple: nom@domaine.com)');
-          break;
-        case 'auth/weak-password':
-            handleValidationError('Le mot de passe est trop faible');
-          break;
-          default:
-            handleValidationError('Une erreur est survenue lors de l\'inscription');
+        // Gestion spéciale pour l'email déjà utilisé avec proposition d'action
+        if (error.code === 'auth/email-already-in-use') {
+          const errorMessage = errorService.handleFirebaseError(error, 'RegisterScreen.handleRegister');
+          setError(errorMessage);
+          Alert.alert(
+            'Email déjà utilisé',
+            'Un compte existe déjà avec cette adresse email. Voulez-vous vous connecter ?',
+            [
+              {
+                text: 'Annuler',
+                style: 'cancel' as AlertButton['style']
+              },
+              {
+                text: 'Se connecter',
+                onPress: () => router.push('/(auth)/login'),
+                style: 'default' as AlertButton['style']
+              }
+            ]
+          );
+        } else {
+          // Utiliser le service d'erreur pour les autres erreurs Firebase
+          handleFirebaseError(error);
         }
       } else {
-        handleValidationError('Une erreur est survenue lors de l\'inscription');
+        // Pour les erreurs non-Firebase, utiliser le service générique
+        const genericError = errorService.handleGenericError(error, 'RegisterScreen.handleRegister');
+        setError(genericError);
       }
     }
   };

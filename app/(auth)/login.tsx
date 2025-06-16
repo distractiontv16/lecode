@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Image, ScrollView, Alert, AlertButton, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Image, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -22,6 +22,7 @@ export default function LoginScreen() {
     error,
     isLoading,
     successMessage,
+    setError,
     setLoading,
     handleFirebaseError,
     handleValidationError,
@@ -31,16 +32,21 @@ export default function LoginScreen() {
   } = useErrorHandler();
   
   const handleLogin = async () => {
-    // Validation des champs
-    if (!email.trim() || !password.trim()) {
+    // Validation des champs obligatoires
+    if (!email.trim()) {
       handleValidationError('validation/empty-fields');
       return;
     }
 
-    // Validation de l'email
-    const emailError = errorService.validateEmail(email);
-    if (emailError) {
-      handleValidationError('validation/invalid-email');
+    if (!password.trim()) {
+      handleValidationError('validation/empty-fields');
+      return;
+    }
+
+    // Validation de l'email avec le service
+    const emailValidationError = errorService.validateEmail(email);
+    if (emailValidationError) {
+      setError(emailValidationError);
       return;
     }
 
@@ -52,31 +58,12 @@ export default function LoginScreen() {
       router.replace('/learn');
     } catch (e: any) {
       if (e instanceof FirebaseError) {
-        const errorMessage = errorService.handleFirebaseError(e, 'LoginScreen.handleLogin');
-
-        // Pour certaines erreurs d'authentification, proposer des actions
-        if (['auth/invalid-email', 'auth/user-not-found', 'auth/wrong-password'].includes(e.code)) {
-          Alert.alert(
-            errorMessage.title,
-            errorMessage.message,
-            [
-              {
-                text: 'OK',
-                style: 'default' as AlertButton['style']
-              },
-              {
-                text: 'Mot de passe oublié ?',
-                onPress: handleForgotPassword,
-                style: 'destructive' as AlertButton['style']
-              }
-            ],
-            { cancelable: false }
-          );
-        } else {
-          handleFirebaseError(e);
-        }
-      } else {
+        // Utiliser le service d'erreur pour traiter l'erreur Firebase
         handleFirebaseError(e);
+      } else {
+        // Pour les erreurs non-Firebase, utiliser le service générique
+        const genericError = errorService.handleGenericError(e, 'LoginScreen.handleLogin');
+        setError(genericError);
       }
     } finally {
       setLoading(false);
@@ -84,22 +71,22 @@ export default function LoginScreen() {
   };
   
   const handleForgotPassword = async () => {
-    if (!email) {
+    if (!email.trim()) {
       handleValidationError('validation/empty-fields');
       return;
     }
 
-    // Validation de l'email
-    const emailError = errorService.validateEmail(email);
-    if (emailError) {
-      handleValidationError('validation/invalid-email');
+    // Validation de l'email avec le service
+    const emailValidationError = errorService.validateEmail(email);
+    if (emailValidationError) {
+      setError(emailValidationError);
       return;
     }
 
     setLoading(true);
 
     try {
-      await forgotPassword(email);
+      await forgotPassword(email.trim());
       handleSuccess('auth/password-reset-sent');
       Alert.alert(
         "Email envoyé",
@@ -109,7 +96,8 @@ export default function LoginScreen() {
       if (e instanceof FirebaseError) {
         handleFirebaseError(e);
       } else {
-        handleFirebaseError(e);
+        const genericError = errorService.handleGenericError(e, 'LoginScreen.handleForgotPassword');
+        setError(genericError);
       }
     } finally {
       setLoading(false);

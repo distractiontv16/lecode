@@ -117,6 +117,23 @@ export const AUTH_ERRORS: Record<string, ErrorMessage> = {
     title: 'Mot de passe trop faible',
     message: 'Le mot de passe doit contenir au moins 6 caractères',
     type: ErrorType.VALIDATION
+  },
+  'auth/requires-recent-login': {
+    title: 'Reconnexion requise',
+    message: 'Cette opération nécessite une reconnexion récente. Veuillez vous reconnecter.',
+    type: ErrorType.AUTHENTICATION,
+    actionable: true,
+    actionText: 'Se reconnecter'
+  },
+  'auth/invalid-action-code': {
+    title: 'Code invalide',
+    message: 'Le code de vérification est invalide ou a expiré',
+    type: ErrorType.AUTHENTICATION
+  },
+  'auth/expired-action-code': {
+    title: 'Code expiré',
+    message: 'Le code de vérification a expiré. Veuillez en demander un nouveau.',
+    type: ErrorType.AUTHENTICATION
   }
 };
 
@@ -216,8 +233,11 @@ export const mapFirebaseError = (firebaseErrorCode: string): string => {
     'auth/network-request-failed': 'auth/network-request-failed',
     'auth/invalid-credential': 'auth/invalid-credential',
     'auth/operation-not-allowed': 'auth/operation-not-allowed',
-    'auth/weak-password': 'auth/weak-password'
+    'auth/weak-password': 'auth/weak-password',
+    'auth/requires-recent-login': 'auth/requires-recent-login',
+    'auth/invalid-action-code': 'auth/invalid-action-code',
+    'auth/expired-action-code': 'auth/expired-action-code'
   };
-  
+
   return firebaseToInternalMap[firebaseErrorCode] || 'general/unknown';
 };
