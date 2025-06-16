@@ -1,9 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
+import { View, ScrollView, StyleSheet, Text, RefreshControl, Alert } from 'react-native';
 import { Stack } from 'expo-router';
 import MetricCard from '../../components/ui/MetricCard';
 import WeeklyActivityChart from '../../components/ui/WeeklyActivityChart';
-import { streakService } from '../services/streakService';
+import CategoryProgressChart from '../../components/ui/CategoryProgressChart';
+import ScoreTrendChart from '../../components/ui/ScoreTrendChart';
+import PerformanceStatsCard from '../../components/ui/PerformanceStatsCard';
+import WeakPointsCard from '../../components/ui/WeakPointsCard';
+import CategoryDetailCard from '../../components/ui/CategoryDetailCard';
+import SessionHistoryCard from '../../components/ui/SessionHistoryCard';
+import GoalsCard from '../../components/ui/GoalsCard';
+import ComparisonCard from '../../components/ui/ComparisonCard';
+import LeaderboardCard from '../../components/ui/LeaderboardCard';
+import StatsTabs from '../../components/ui/StatsTabs';
+import PeriodFilter from '../../components/ui/PeriodFilter';
+import StatsLoadingSkeleton from '../../components/ui/StatsLoadingSkeleton';
+import { statisticsService, PerformanceStats, CategoryStats } from '../services/statistics.service';
 import { useAuth } from '../contexts/AuthContext';
 
 interface WeeklyActivityData {
@@ -14,174 +26,375 @@ interface WeeklyActivityData {
 
 export default function StatsScreen() {
   const { user } = useAuth();
-  const [streak, setStreak] = useState(0);
-  const [completedQuizzes, setCompletedQuizzes] = useState(0);
-  const [accuracy, setAccuracy] = useState(0);
-  const [averageTime, setAverageTime] = useState(0);
 
-  // Données dynamiques pour le graphique d'activité hebdomadaire
+  // États pour les nouvelles statistiques
+  const [performanceStats, setPerformanceStats] = useState<PerformanceStats | null>(null);
+  const [categoryStats, setCategoryStats] = useState<CategoryStats[]>([]);
+  const [weakPoints, setWeakPoints] = useState<any[]>([]);
+  const [sessionHistory, setSessionHistory] = useState<any[]>([]);
+  const [userGoals, setUserGoals] = useState<any[]>([]);
+  const [comparisonStats, setComparisonStats] = useState<any>(null);
+  const [leaderboardData, setLeaderboardData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // États pour la navigation et les filtres
+  const [activeTab, setActiveTab] = useState('overview');
+  const [selectedPeriod, setSelectedPeriod] = useState('week');
+
+  // Configuration des onglets
+  const tabs = [
+    { id: 'overview', title: 'Vue d\'ensemble', icon: 'view-dashboard' },
+    { id: 'performance', title: 'Performance', icon: 'chart-line', badge: weakPoints.length },
+    { id: 'categories', title: 'Catégories', icon: 'book-open-variant' },
+    { id: 'social', title: 'Communauté', icon: 'account-group' },
+  ];
+
+  // Configuration des périodes
+  const periods = [
+    { id: 'week', label: 'Cette semaine', shortLabel: '7j', icon: 'calendar-week' },
+    { id: 'month', label: 'Ce mois', shortLabel: '30j', icon: 'calendar-month' },
+    { id: 'quarter', label: 'Ce trimestre', shortLabel: '3m', icon: 'calendar-range' },
+    { id: 'year', label: 'Cette année', shortLabel: '1an', icon: 'calendar' },
+  ];
+
+  // États pour la compatibilité avec l'ancien code
   const [weeklyData, setWeeklyData] = useState<WeeklyActivityData[]>([]);
 
+  // Fonction pour charger toutes les statistiques
+  const loadStatistics = async () => {
+    if (!user?.uid) return;
+
+    try {
+      setLoading(true);
+
+      // Charger les statistiques de performance
+      const perfStats = await statisticsService.getPerformanceStats();
+      setPerformanceStats(perfStats);
+
+      // Charger les statistiques par catégorie
+      const catStats = await statisticsService.getCategoryStats();
+      setCategoryStats(catStats);
+
+      // Charger les points faibles
+      const weakPointsData = await statisticsService.getWeakPoints();
+      setWeakPoints(weakPointsData);
+
+      // Charger l'historique des sessions
+      const sessionHistoryData = await statisticsService.getSessionHistory(10);
+      setSessionHistory(sessionHistoryData);
+
+      // Charger les objectifs utilisateur
+      const goalsData = await statisticsService.getUserGoals();
+      setUserGoals(goalsData);
+
+      // Charger les statistiques de comparaison
+      const comparisonData = await statisticsService.getComparisonStats();
+      setComparisonStats(comparisonData);
+
+      // Charger le leaderboard
+      const leaderboard = await statisticsService.getLeaderboard('week');
+      setLeaderboardData(leaderboard);
+
+      // Convertir les données d'activité pour le graphique existant
+      const weeklyActivityData = perfStats.activityData.map((activity, index) => ({
+        day: ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'][index] || 'Jour',
+        quizCount: activity.quizCount,
+        height: Math.min(activity.quizCount * 15, 150)
+      }));
+      setWeeklyData(weeklyActivityData);
+
+    } catch (error) {
+      console.error('Erreur lors du chargement des statistiques:', error);
+      Alert.alert('Erreur', 'Impossible de charger les statistiques');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fonction de rafraîchissement
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadStatistics();
+    setRefreshing(false);
+  };
+
   useEffect(() => {
-    const generateWeeklyData = () => {
-      const days = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
-      const newWeeklyData: WeeklyActivityData[] = days.map(day => {
-        const quizCount = Math.floor(Math.random() * 10) + 1; // 1 à 10 quiz par jour
-        return { day, quizCount, height: quizCount * 15 }; // Hauteur basée sur quizCount, max 150
-      });
-      setWeeklyData(newWeeklyData);
-    };
+    loadStatistics();
 
-    generateWeeklyData(); // Générer les données au chargement du composant
-
-    const loadStreak = async () => {
-      if (user?.uid) {
-        try {
-          // const streakData = await streakService.getStreak(user.uid);
-          // setStreak(streakData.currentStreak);
-          const fakeStreak = Math.floor(Math.random() * 30) + 1; // Valeur aléatoire entre 1 et 30
-          setStreak(fakeStreak);
-        } catch (error) {
-          console.error('Erreur lors du chargement du streak (simulation):', error);
-          setStreak(0); // Mettre une valeur par défaut en cas d'erreur
-        }
-      }
-    };
-
-    // Simulation du chargement des quiz complétés
-    const loadCompletedQuizzes = async () => {
-      if (user?.uid && user.metadata) {
-        try {
-          // À remplacer par un appel réel au service plus tard
-          // const stats = await statsService.getGeneralStats(user.uid);
-          // setCompletedQuizzes(stats.totalQuizCompleted || 0);
-
-          console.log("Simulation: Chargement des quiz complétés pour l'utilisateur:", user.uid);
-          // Simule un délai réseau
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          // const creationTime = new Date(user.metadata.creationTime || 0).getTime();
-          // const lastSignInTime = new Date(user.metadata.lastSignInTime || 0).getTime();
-
-          // Si la différence est de moins de 10 secondes, on considère que c'est un nouvel utilisateur pour cette session
-          // if (Math.abs(lastSignInTime - creationTime) < 10000) { 
-          //   console.log("Simulation: Nouvel utilisateur détecté, initialisation des quiz complétés à 0.");
-          //   setCompletedQuizzes(0);
-          // } else {
-            const fakeCompletedQuizzes = Math.floor(Math.random() * 50) + 10; // Valeur aléatoire entre 10 et 59
-            setCompletedQuizzes(fakeCompletedQuizzes);
-          // }
-
-        } catch (error) {
-          console.error('Erreur lors du chargement des quiz complétés (simulation):', error);
-          setCompletedQuizzes(0); // Mettre une valeur par défaut en cas d'erreur
-        }
-      }
-    };
-
-    // Simulation du chargement de la précision
-    const loadAccuracy = async () => {
-      if (user?.uid && user.metadata) {
-        try {
-          // À remplacer par un appel réel au service plus tard
-          // const stats = await statsService.getGeneralStats(user.uid);
-          // setAccuracy(stats.averageScore || 0);
-
-          console.log("Simulation: Chargement de la précision pour l'utilisateur:", user.uid);
-          await new Promise(resolve => setTimeout(resolve, 550)); // Léger décalage pour voir l'effet
-
-          // const creationTime = new Date(user.metadata.creationTime || 0).getTime();
-          // const lastSignInTime = new Date(user.metadata.lastSignInTime || 0).getTime();
-
-          // if (Math.abs(lastSignInTime - creationTime) < 10000) {
-          //   console.log("Simulation: Nouvel utilisateur détecté, initialisation de la précision à 0.");
-          //   setAccuracy(0);
-          // } else {
-            const fakeAccuracy = Math.floor(Math.random() * 31) + 70; // Valeur aléatoire entre 70 et 100
-            setAccuracy(fakeAccuracy);
-          // }
-        } catch (error) {
-          console.error('Erreur lors du chargement de la précision (simulation):', error);
-          setAccuracy(0);
-        }
-      }
-    };
-
-    // Simulation du chargement du temps moyen
-    const loadAverageTime = async () => {
-      if (user?.uid && user.metadata) {
-        try {
-          // À remplacer par un appel réel au service plus tard
-          // const stats = await statsService.getGeneralStats(user.uid);
-          // setAverageTime(stats.averageTimePerQuiz || 0);
-
-          console.log("Simulation: Chargement du temps moyen pour l'utilisateur:", user.uid);
-          await new Promise(resolve => setTimeout(resolve, 600)); // Léger décalage
-
-          // const creationTime = new Date(user.metadata.creationTime || 0).getTime();
-          // const lastSignInTime = new Date(user.metadata.lastSignInTime || 0).getTime();
-
-          // if (Math.abs(lastSignInTime - creationTime) < 10000) {
-          //   console.log("Simulation: Nouvel utilisateur détecté, initialisation du temps moyen à 0.");
-          //   setAverageTime(0);
-          // } else {
-            // Valeur aléatoire entre 1.0 et 5.0 (avec une décimale)
-            const fakeAverageTime = parseFloat((Math.random() * 4 + 1).toFixed(1)); 
-            setAverageTime(fakeAverageTime);
-          // }
-        } catch (error) {
-          console.error('Erreur lors du chargement du temps moyen (simulation):', error);
-          setAverageTime(0);
-        }
-      }
-    };
-
-    loadStreak();
-    loadCompletedQuizzes();
-    loadAccuracy();
-    loadAverageTime();
   }, [user]);
+
+  // Fonction pour obtenir les couleurs des catégories
+  const getCategoryColor = (index: number) => {
+    const colors = [
+      '#4CAF50', '#2196F3', '#FF9800', '#9C27B0',
+      '#F44336', '#00BCD4', '#795548', '#607D8B',
+      '#E91E63', '#3F51B5'
+    ];
+    return colors[index % colors.length];
+  };
+
+  // Fonctions de rendu pour chaque onglet
+  const renderOverviewTab = () => (
+    <>
+      {/* Métriques principales */}
+      <View style={styles.metricGrid}>
+        <MetricCard
+          icon="🔥"
+          value={performanceStats?.currentStreak || 0}
+          label="Jours de suite"
+          color="#FF6B35"
+        />
+        <MetricCard
+          icon="✅"
+          value={performanceStats?.totalQuizzesCompleted || 0}
+          label="Quiz complétés"
+          color="#4CAF50"
+        />
+        <MetricCard
+          icon="🎯"
+          value={performanceStats?.averageScore || 0}
+          label="Précision (%)"
+          color="#2196F3"
+        />
+        <MetricCard
+          icon="⚡"
+          value={performanceStats?.averageTimePerQuiz || 0}
+          label="Temps moyen (min)"
+          color="#FF9800"
+        />
+      </View>
+
+      {/* Graphique d'activité hebdomadaire */}
+      <WeeklyActivityChart data={weeklyData} />
+
+      {/* Objectifs utilisateur */}
+      <GoalsCard
+        goals={userGoals}
+        onGoalPress={(goalId) => {
+          Alert.alert('Objectif', `Détails de l'objectif ${goalId}`);
+        }}
+        onAddGoalPress={() => {
+          Alert.alert('Nouveau', 'Créer un nouvel objectif');
+        }}
+      />
+    </>
+  );
+
+  const renderPerformanceTab = () => (
+    <>
+      {/* Évolution des scores */}
+      {performanceStats?.accuracyTrend && (
+        <ScoreTrendChart
+          data={performanceStats.accuracyTrend}
+          title="Évolution de la précision"
+          color="#2196F3"
+        />
+      )}
+
+      {/* Statistiques de performance détaillées */}
+      {performanceStats && (
+        <PerformanceStatsCard
+          title="Performance détaillée"
+          stats={[
+            {
+              label: 'Temps total',
+              value: `${Math.round(performanceStats.totalTimeSpent)}h`,
+              icon: 'clock-outline',
+              color: '#FF9800',
+              subtitle: 'Temps d\'étude'
+            },
+            {
+              label: 'Meilleur streak',
+              value: performanceStats.bestStreak,
+              icon: 'fire',
+              color: '#FF6B35',
+              trend: performanceStats.currentStreak - performanceStats.bestStreak + performanceStats.currentStreak
+            },
+            {
+              label: 'Points XP',
+              value: performanceStats.totalXP,
+              icon: 'star',
+              color: '#9C27B0',
+              subtitle: 'Expérience totale'
+            },
+            {
+              label: 'Cœurs',
+              value: performanceStats.heartsCount,
+              icon: 'heart',
+              color: '#E91E63',
+              subtitle: 'Vies restantes'
+            }
+          ]}
+        />
+      )}
+
+      {/* Points faibles et recommandations */}
+      <WeakPointsCard
+        weakPoints={weakPoints}
+        onCategoryPress={(categoryName) => {
+          Alert.alert('Navigation', `Redirection vers ${categoryName}`);
+        }}
+      />
+
+      {/* Historique des sessions */}
+      <SessionHistoryCard
+        sessions={sessionHistory}
+        onSessionPress={(sessionId) => {
+          Alert.alert('Session', `Détails de la session ${sessionId}`);
+        }}
+        onViewAllPress={() => {
+          Alert.alert('Navigation', 'Voir tout l\'historique des sessions');
+        }}
+      />
+    </>
+  );
+
+  const renderCategoriesTab = () => (
+    <>
+      {/* Progression par catégorie */}
+      {categoryStats.length > 0 && (
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Progression par catégorie</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.categoryScrollView}
+          >
+            {categoryStats.slice(0, 6).map((category, index) => (
+              <CategoryProgressChart
+                key={category.categoryId}
+                categoryName={category.categoryName}
+                progress={category.progressPercentage}
+                completedQuizzes={category.completedQuizzes}
+                totalQuizzes={category.totalQuizzes}
+                averageScore={category.averageScore}
+                color={getCategoryColor(index)}
+                size={120}
+              />
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Détails par catégorie */}
+      {categoryStats.length > 0 && (
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Détails par catégorie</Text>
+          {categoryStats.slice(0, 4).map((category, index) => (
+            <CategoryDetailCard
+              key={category.categoryId}
+              categoryName={category.categoryName}
+              totalQuizzes={category.totalQuizzes}
+              completedQuizzes={category.completedQuizzes}
+              averageScore={category.averageScore}
+              bestScore={category.bestScore}
+              averageTime={category.averageTime}
+              progressPercentage={category.progressPercentage}
+              lastActivity={category.lastActivity}
+              weakPoints={category.weakPoints}
+              color={getCategoryColor(index)}
+              onPress={() => {
+                Alert.alert('Navigation', `Voir les détails de ${category.categoryName}`);
+              }}
+            />
+          ))}
+        </View>
+      )}
+    </>
+  );
+
+  const renderSocialTab = () => (
+    <>
+      {/* Comparaison communautaire */}
+      {comparisonStats && (
+        <ComparisonCard
+          comparisonStats={comparisonStats}
+          onViewLeaderboardPress={() => {
+            Alert.alert('Navigation', 'Voir le classement complet');
+          }}
+        />
+      )}
+
+      {/* Leaderboard */}
+      {leaderboardData && (
+        <LeaderboardCard
+          leaderboard={leaderboardData.topEntries}
+          currentUserEntry={leaderboardData.currentUserEntry}
+          onViewFullLeaderboard={() => {
+            Alert.alert('Navigation', 'Voir le classement complet');
+          }}
+          title="Top 10 - Cette semaine"
+        />
+      )}
+    </>
+  );
+
+  // Fonction pour rendre le contenu selon l'onglet actif
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'overview':
+        return renderOverviewTab();
+      case 'performance':
+        return renderPerformanceTab();
+      case 'categories':
+        return renderCategoriesTab();
+      case 'social':
+        return renderSocialTab();
+      default:
+        return renderOverviewTab();
+    }
+  };
+
+  if (loading && !performanceStats) {
+    return (
+      <>
+        <Stack.Screen
+          options={{
+            title: 'Statistiques',
+            headerStyle: { backgroundColor: '#fff' },
+            headerShadowVisible: false,
+          }}
+        />
+        <StatsLoadingSkeleton />
+      </>
+    );
+  }
+
+
 
   return (
     <>
       <Stack.Screen
         options={{
           title: 'Statistiques',
-          headerStyle: {
-            backgroundColor: '#fff',
-          },
+          headerStyle: { backgroundColor: '#fff' },
           headerShadowVisible: false,
         }}
       />
-      <ScrollView style={styles.container}>
-        <View style={styles.metricGrid}>
-          <MetricCard
-            icon="🔥"
-            value={streak}
-            label="Jours de suite"
-            color="#FF6B35"
-          />
-          <MetricCard
-            icon="✅"
-            value={completedQuizzes}
-            label="Quiz complétés"
-            color="#4CAF50"
-          />
-          <MetricCard
-            icon="🎯"
-            value={accuracy}
-            label="Précision (%)"
-            color="#2196F3"
-          />
-          <MetricCard
-            icon="⚡"
-            value={averageTime}
-            label="Temps moyen (min)"
-            color="#FF9800"
-          />
-        </View>
 
-        <WeeklyActivityChart data={weeklyData} />
+      {/* Navigation par onglets */}
+      <StatsTabs
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabPress={setActiveTab}
+      />
+
+      {/* Filtre par période */}
+      <PeriodFilter
+        periods={periods}
+        selectedPeriod={selectedPeriod}
+        onPeriodChange={setSelectedPeriod}
+      />
+
+      {/* Contenu principal */}
+      <ScrollView
+        style={styles.container}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {renderTabContent()}
       </ScrollView>
     </>
   );
@@ -190,12 +403,40 @@ export default function StatsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f5f5f5',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
   },
   metricGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
     padding: 16,
+    backgroundColor: '#fff',
+    marginBottom: 8,
   },
-}); 
+  sectionContainer: {
+    backgroundColor: '#fff',
+    marginVertical: 8,
+    paddingTop: 20,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#333',
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  categoryScrollView: {
+    paddingHorizontal: 8,
+    paddingBottom: 16,
+  },
+});
