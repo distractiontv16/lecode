@@ -18,12 +18,12 @@ export default function MainLayout() {
   
   // Surveillance des changements dans xp (du contexte XP)
   useEffect(() => {
-    if (xp > 0) {
+    if (xp > 0 && xp !== totalXP) {
       setTotalXP(xp);
     }
-  }, [xp]);
-  
-  // Charger les statistiques utilisateur au montage et à chaque changement de l'utilisateur
+  }, [xp, totalXP]);
+
+  // Charger les statistiques utilisateur au montage seulement
   useEffect(() => {
     const loadUserStats = async () => {
       if (!user) return;
@@ -32,17 +32,10 @@ export default function MainLayout() {
         const progressService = new ProgressService();
         setIsLoading(true);
 
-        // Utiliser d'abord le cache pour un affichage rapide
+        // Charger depuis le cache d'abord
         const cachedProgress = await progressService.getUserProgress(false);
-        if (cachedProgress && cachedProgress.totalXP !== totalXP) {
+        if (cachedProgress) {
           setTotalXP(cachedProgress.totalXP || 0);
-        }
-
-        // Puis rafraîchir depuis Firebase seulement si nécessaire
-        const progress = await progressService.getUserProgress(true);
-        if (progress && progress.totalXP !== totalXP) {
-          setTotalXP(progress.totalXP || 0);
-          console.log(`MainLayout: XP chargés depuis Firebase: ${progress.totalXP}`);
         }
       } catch (error) {
         console.error('Erreur lors du chargement des statistiques utilisateur:', error);
@@ -51,11 +44,11 @@ export default function MainLayout() {
       }
     };
 
-    // Charger seulement si l'utilisateur existe et qu'on n'a pas déjà les XP
+    // Charger seulement une fois au montage
     if (user && totalXP === 0) {
       loadUserStats();
     }
-  }, [user]);
+  }, [user]); // Supprimer totalXP des dépendances
 
   return (
     <View style={styles.container}>
