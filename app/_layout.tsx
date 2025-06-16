@@ -60,26 +60,12 @@ export default function RootLayout() {
                       <Stack.Screen name="index" />
                       
                       {/* Routes d'authentification avec des animations spécifiques */}
-                      <Stack.Screen 
-                        name="(auth)/login" 
-                        options={{ 
+                      <Stack.Screen
+                        name="(auth)"
+                        options={{
                           animation: 'fade',
                           presentation: 'transparentModal',
-                        }} 
-                      />
-                      <Stack.Screen 
-                        name="(auth)/register" 
-                        options={{ 
-                          animation: 'fade',
-                          presentation: 'transparentModal',
-                        }} 
-                      />
-                      <Stack.Screen 
-                        name="(auth)/email-link" 
-                        options={{ 
-                          animation: 'fade',
-                          presentation: 'transparentModal',
-                        }} 
+                        }}
                       />
                       
                       {/* Routes principales avec layout partagé */}

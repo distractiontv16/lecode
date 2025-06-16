@@ -27,22 +27,21 @@ export default function MainLayout() {
   useEffect(() => {
     const loadUserStats = async () => {
       if (!user) return;
-      
+
       try {
         const progressService = new ProgressService();
         setIsLoading(true);
-        
+
         // Utiliser d'abord le cache pour un affichage rapide
         const cachedProgress = await progressService.getUserProgress(false);
-        if (cachedProgress) {
+        if (cachedProgress && cachedProgress.totalXP !== totalXP) {
           setTotalXP(cachedProgress.totalXP || 0);
         }
-        
-        // Puis rafraîchir depuis Firebase
+
+        // Puis rafraîchir depuis Firebase seulement si nécessaire
         const progress = await progressService.getUserProgress(true);
-        if (progress) {
+        if (progress && progress.totalXP !== totalXP) {
           setTotalXP(progress.totalXP || 0);
-          
           console.log(`MainLayout: XP chargés depuis Firebase: ${progress.totalXP}`);
         }
       } catch (error) {
@@ -51,15 +50,11 @@ export default function MainLayout() {
         setIsLoading(false);
       }
     };
-    
-    loadUserStats();
-    
-    // Configurer un intervalle pour actualiser régulièrement les stats
-    const refreshInterval = setInterval(loadUserStats, 10000); // Rafraîchir toutes les 10 secondes
-    
-    return () => {
-      clearInterval(refreshInterval); // Nettoyer l'intervalle au démontage
-    };
+
+    // Charger seulement si l'utilisateur existe et qu'on n'a pas déjà les XP
+    if (user && totalXP === 0) {
+      loadUserStats();
+    }
   }, [user]);
 
   return (
